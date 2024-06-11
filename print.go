@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/mattn/go-isatty"
-	"github.com/mattn/go-runewidth"
 	"math"
 	"os"
 	"regexp"
@@ -13,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-isatty"
+	"github.com/mattn/go-runewidth"
 )
 
 var (

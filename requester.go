@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
-	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpproxy"
-	"go.uber.org/automaxprocs/maxprocs"
-	"golang.org/x/time/rate"
+	"io"
 	"io/ioutil"
+	"log"
+	"math/rand"
 	"net"
+	"net/http"
 	url2 "net/url"
 	"os"
 	"os/signal"
@@ -19,7 +20,14 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpproxy"
+	"go.uber.org/automaxprocs/maxprocs"
+	"golang.org/x/time/rate"
 )
+
+var userAgents []string
 
 var (
 	startTime        = time.Now()
@@ -39,6 +47,7 @@ var recordPool = sync.Pool{
 }
 
 func init() {
+	getNewUserAgents()
 	// Honoring env GOMAXPROCS
 	_, _ = maxprocs.Set()
 	defer func() {
@@ -164,6 +173,26 @@ func addMissingPort(addr string, isTLS bool) string {
 	return net.JoinHostPort(addr, strconv.Itoa(port))
 }
 
+func getNewUserAgents() {
+	if len(userAgents) == 0 {
+		resp, err := http.Get("https://jnrbsn.github.io/user-agents/user-agents.json")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = json.Unmarshal(body, &userAgents)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
 func buildTLSConfig(opt *ClientOpt) (*tls.Config, error) {
 	var certs []tls.Certificate
 	if opt.certPath != "" && opt.keyPath != "" {
@@ -174,9 +203,57 @@ func buildTLSConfig(opt *ClientOpt) (*tls.Config, error) {
 		certs = append(certs, c)
 	}
 	return &tls.Config{
+		MinVersion:         getRandomTLSVersion(),
 		InsecureSkipVerify: opt.insecure,
 		Certificates:       certs,
+		CurvePreferences:   []tls.CurveID{tls.X25519, tls.CurveP256},
+		CipherSuites:       getRandomCipherSuites(),
 	}, nil
+}
+
+func getRandomCipherSuites() []uint16 {
+	cipherSuites := []uint16{
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_CHACHA20_POLY1305_SHA256,
+		tls.TLS_AES_128_GCM_SHA256,
+		tls.TLS_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+	}
+
+	rand.Shuffle(len(cipherSuites), func(i, j int) {
+		cipherSuites[i], cipherSuites[j] = cipherSuites[j], cipherSuites[i]
+	})
+
+	// gen random amount of cipher suites
+	randomLength := rand.Intn(len(cipherSuites)) + 1
+	return cipherSuites[:randomLength]
+}
+
+func getRandomTLSVersion() uint16 {
+	versions := []uint16{
+		tls.VersionTLS13,
+		tls.VersionTLS12,
+		tls.VersionTLS11,
+		tls.VersionTLS10,
+	}
+	rand.Shuffle(len(versions), func(i, j int) {
+		versions[i], versions[j] = versions[j], versions[i]
+	})
+	return versions[0]
 }
 
 func buildRequestClient(opt *ClientOpt, r *int64, w *int64) (*fasthttp.HostClient, *fasthttp.RequestHeader, error) {
@@ -184,10 +261,11 @@ func buildRequestClient(opt *ClientOpt, r *int64, w *int64) (*fasthttp.HostClien
 	if err != nil {
 		return nil, nil, err
 	}
+	rand.Seed(time.Now().Unix())
 	httpClient := &fasthttp.HostClient{
 		Addr:                          addMissingPort(u.Host, u.Scheme == "https"),
 		IsTLS:                         u.Scheme == "https",
-		Name:                          "plow",
+		Name:                          userAgents[rand.Intn(len(userAgents))],
 		MaxConns:                      opt.maxConns,
 		ReadTimeout:                   opt.readTimeout,
 		WriteTimeout:                  opt.writeTimeout,
