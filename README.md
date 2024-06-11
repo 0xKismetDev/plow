@@ -1,5 +1,12 @@
 # plow (with tls fingerprint (ja3/ja4) and UA Randomizing) <!-- omit in toc -->
 
++ Added Random (Updated) User Agents for each instance.
++ Added Randomizing of TLS Config to Spoof JA3 & JA4 Fingerprinting
+
+Sadly, only the entire instance can be only randomized once due to how plow works and what makes it so fast.  
+You would have to rebuild the Requestor on each request which is not efficient at all or change how plow works from the ground up :(.
+
+#
 [![build](https://github.com/six-ddc/plow/actions/workflows/release.yml/badge.svg)](https://github.com/six-ddc/plow/actions/workflows/release.yml)
 [![Homebrew](https://img.shields.io/badge/dynamic/json.svg?url=https://formulae.brew.sh/api/formula/plow.json&query=$.versions.stable&label=homebrew)](https://formulae.brew.sh/formula/plow)
 [![GitHub license](https://img.shields.io/github/license/six-ddc/plow.svg)](https://github.com/six-ddc/plow/blob/main/LICENSE)
